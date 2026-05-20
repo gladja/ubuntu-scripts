@@ -43,18 +43,16 @@ WEB_ROOT="/var/www/$DOMAIN"
 NGINX_CONF="/etc/nginx/sites-enabled/${DOMAIN}.conf"
 SSL_CERT_EMAIL="valentin.store@proton.me"
 
-info "Удаляю /var/www/html..."
-rm -rf /var/www/html || true
+info "Удаление Apache..."
 
-info "Проверка Apache..."
-if systemctl is-active --quiet apache2; then
-    info "Apache активен. Останавливаю и удаляю..."
-    systemctl stop apache2
-    systemctl disable apache2
-    apt purge apache2* -y || true
-else
-    info "Apache не работает. Пропускаем."
-fi
+systemctl stop apache2 || true
+systemctl disable apache2 || true
+systemctl mask apache2 || true
+
+apt purge apache2* -y || true
+apt autoremove -y || true
+
+log "Apache удалён и заблокирован."
 
 # Обновление и установка
 echo 'grub-pc grub-pc/install_devices multiselect /dev/sda' | debconf-set-selections
@@ -64,6 +62,9 @@ info "Обновляю систему и устанавливаю пакеты..
 apt update && DEBIAN_FRONTEND=noninteractive apt upgrade -y && apt autoremove -y
 
 apt install nginx php php-curl php-mbstring php-xml php-zip php-fpm curl jq certbot python3-certbot-nginx tree -y
+
+info "Удаляю /var/www/html..."
+rm -rf /var/www/html || true
 
 info "Запускаю nginx и php-fpm..."
 systemctl start nginx
@@ -93,6 +94,17 @@ server {
 
    location / {
       try_files \$uri \$uri/ /index.html;
+   }
+
+   location ~* \.(js|css|png|jpg|jpeg|gif|svg|webp|ico|woff|woff2|ttf|eot)$ {
+      expires 1y;
+      add_header Cache-Control "public, max-age=31536000, immutable";
+      access_log off;
+   } 
+
+   location ~ \.php\$ {
+      include snippets/fastcgi-php.conf;
+      fastcgi_pass unix:/run/php/php8.3-fpm.sock;
    }
 
    location ~ /\.ht {
